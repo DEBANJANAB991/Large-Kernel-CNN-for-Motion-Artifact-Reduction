@@ -39,9 +39,9 @@ import importlib
 print("Repo root:", repo_root)
 print("SwinIR available:", importlib.util.find_spec("SwinIR") is not None)
 
-from MR_LKV_refactorv2 import MR_LKV      # MR-LKV implementation
-from UNet import UNet                     # U-Net baseline
-from replknet import RepLKNet             # Original RepLKNet backbone
+from models.MR_LKV import MR_LKV      # MR-LKV implementation
+from models.UNet import UNet                     # U-Net baseline
+from models.replknet import RepLKNet             # Original RepLKNet backbone
 from SwinIR.models.network_swinir import SwinIR
 
 # Restormer import (repo: swz30/Restormer)
@@ -365,20 +365,7 @@ def _model_dir(ckpt_root: Path, model_name: str) -> Path:
 def main():
     args = parse_args()
     print(f"Starting training with model={args.model}…")
-    results_dir = Path(__file__).resolve().parent / "results" / "plots" / args.model
-    results_dir.mkdir(parents=True, exist_ok=True)
-    gt_sino_dir = results_dir / "ground_truth" / "sinograms"
-    gt_ct_dir   = results_dir / "ground_truth" / "ct_images"
-    art_sino_dir = results_dir / "artifacted" / "sinograms"
-    art_ct_dir   = results_dir / "artifacted" / "ct_images"
-    recon_sino_dir = results_dir / "reconstructed" / "sinograms"
-    recon_ct_dir   = results_dir / "reconstructed" / "ct_images"
-    comparison_dir = results_dir / "comparison"
-
-    for folder in [gt_sino_dir, gt_ct_dir, art_sino_dir, art_ct_dir,
-                   recon_sino_dir, recon_ct_dir, comparison_dir]:
-        folder.mkdir(parents=True, exist_ok=True)
-
+   
     model_ckpt_dir = _model_dir(args.ckpt_dir, args.model)
     model_ckpt_dir.mkdir(parents=True, exist_ok=True)
     print(f"→ Checkpoints will be saved to: {model_ckpt_dir}")
@@ -554,12 +541,6 @@ def main():
             pred = model(art)
             if pred.shape[-2:] != clean.shape[-2:]:
                 pred = F.interpolate(pred, size=clean.shape[-2:], mode='bilinear', align_corners=False)
-            # save sample images for the first batch
-            if batch_idx == 0:
-                save_image(art[0].cpu(), art_sino_dir / f"epoch{epoch:03d}_input.png")
-                save_image(pred[0].cpu(), recon_sino_dir / f"epoch{epoch:03d}_recon.png")
-                save_image(clean[0].cpu(), gt_sino_dir / f"epoch{epoch:03d}_target.png")
-                print(f"Saved sample reconstructions to {recon_sino_dir}")
             running_test += criterion(pred, clean).item() * art.size(0)
             running_psnr += psnr(pred, clean).item() * art.size(0)
             running_ssim += ssim(pred, clean).item() * art.size(0)
