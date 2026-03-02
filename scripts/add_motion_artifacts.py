@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-apply_cubic_spline_motion_to_sinograms.py
+add_motion_artifacts.py
 
-Load clean cone-beam sinograms (.npy) from CLEAN_SINOGRAM_ROOT1 (from config.py),
+Load clean cone-beam sinograms (.npy) from CLEAN_SINOGRAM_ROOT (from config.py),
 apply cubic-spline rotation + translation motion (Option A), and write the
-artifacted sinograms to ARTIFACT_TEST_ROOT (from config.py).
+artifacted sinograms to ARTIFACT_ROOT (from config.py).
 
 Output:
- - ARTIFACT_TEST_ROOT/<stem>_artifact.npy
+ - ARTIFACT_ROOT/<stem>_artifact.npy
 
-No JSON or PNG files are created by this script.
 """
 
 import os
@@ -20,7 +19,7 @@ from typing import Tuple, List, Optional
 from tqdm import tqdm
 from scipy.ndimage import rotate, map_coordinates
 
-# Import your project config which must define CLEAN_SINOGRAM_ROOT1 and ARTIFACT_TEST_ROOT
+# Import your project config which must define CLEAN_SINOGRAM_ROOT and ARTIFACT_ROOT
 from config import CLEAN_SINOGRAM_ROOT, ARTIFACT_ROOT
 
 # ---------------------------------------------------------------------
