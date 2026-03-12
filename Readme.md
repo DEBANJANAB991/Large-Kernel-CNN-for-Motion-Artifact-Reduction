@@ -17,17 +17,23 @@ The project investigates whether super large-kernel CNN architectures can improv
 - Evaluation using PSNR, SSIM and FLOPs
 
 ## Dataset
-Dataset used: **CQ500 CT dataset**
+
+The experiments use the CQ500 head CT dataset.
 
 Download:
 https://www.kaggle.com/datasets/crawford/qureai-headct
 
-Structure expected:
+Pipeline:
+
+1. Convert DICOM CT scans to sinograms using diffct.
+2. Introduce simulated motion artifacts in the sinogram domain.
+3. Train CNN models to reconstruct artifact-free images.
+
+Dataset structure:
 
 dataset/
     clean/
     artifact/
-
 ## Installation
 
 Clone repository
@@ -62,6 +68,17 @@ Metrics computed:
 - PSNR
 - SSIM
 - FLOPs
+
+## Results
+
+| Model | PSNR ↑ | SSIM ↑ |
+|------|------|------|
+| UNet | 37.11 | 0.9815 |
+| RepLKNet | -12.42 | 0.9034 |
+| MR-LKV | 39.97 | 0.994 |
+| SwinIR | 40.55 | 0.9916 |
+| Restormer | 11.22 | 0.0228 |
+
 
 ## Hardware
 Experiments were executed on an HPC cluster using an NVIDIA Tesla V100 GPU with 32GB VRAM.
