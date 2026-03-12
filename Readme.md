@@ -63,6 +63,21 @@ Metrics computed:
 ## Hardware
 Experiments were executed on an HPC cluster using an NVIDIA Tesla V100 GPU with 32GB VRAM.
 
+## Configuration
+
+All training and experiment settings are defined in:
+
+config.py
+
+This file contains parameters such as:
+
+- model architecture
+- learning rate
+- batch size
+- number of epochs
+- dataset paths
+- image resolution
+
 ## Citation
 If you use this code please cite:
 
