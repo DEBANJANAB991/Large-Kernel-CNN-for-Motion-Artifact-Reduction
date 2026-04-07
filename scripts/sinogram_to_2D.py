@@ -1,38 +1,102 @@
-import os
+#!/usr/bin/env python3
+
 import numpy as np
 from pathlib import Path
-#from config import CLEAN_SINOGRAM_ROOT, ARTIFACT_ROOT, CLEAN_SINOGRAM_2D, ARTIFACT_SINOGRAM_2D
-from config import TEST_CLEAN_SINOGRAM, TEST_ARTIFACT_ROOT, CLEAN_SINOGRAM_2D_TEST, ARTIFACT_SINOGRAM_2D_TEST
-OUT_CLEAN =CLEAN_SINOGRAM_2D_TEST
-OUT_ART   =ARTIFACT_SINOGRAM_2D_TEST
-OUT_CLEAN.mkdir(exist_ok=True)
-OUT_ART.mkdir(exist_ok=True)
+from tqdm import tqdm
+import sys
 
-clean_files = sorted([f for f in Path(TEST_CLEAN_SINOGRAM).glob("*.npy")])
-artifact_files = sorted([f for f in Path(TEST_ARTIFACT_ROOT).glob("*.npy")])
+# Add project root
+repo_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(repo_root))
 
-# match pairs by filename stem
-pairs = {}
-for c in clean_files:
-    stem = c.stem
-    a = Path(TEST_ARTIFACT_ROOT) / f"{stem}_artifact.npy"
-    if a.exists():
-        pairs[stem] = (c, a)
+from config import (
+    CLEAN_SINOGRAM_ROOT,
+    ARTIFACT_SINOGRAM_ROOT,
+    CLEAN_SINOGRAM_2D,
+    ARTIFACT_ROOT_2D
+)
 
-print("Number of paired sinograms found:", len(pairs))
+# ============================================================
+# SETTINGS
+# ============================================================
 
-for stem, (clean_path, art_path) in pairs.items():
-    clean = np.load(clean_path)        # shape (views, u, v)
-    art   = np.load(art_path)
+USE_FILTERING = True       # remove empty slices
+MEAN_THRESHOLD = 0.01   
+STRIDE = 1                 # use 2 to reduce dataset size
 
-    assert clean.shape == art.shape
-    num_views, H, W = clean.shape
 
-    for v in range(num_views):
-        clean_slice = clean[v]
-        art_slice   = art[v]
+# ============================================================
+# MAIN FUNCTION
+# ============================================================
 
-        np.save(OUT_CLEAN / f"{stem}_view{v:03d}.npy", clean_slice)
-        np.save(OUT_ART   / f"{stem}_view{v:03d}.npy", art_slice)
+def main():
 
-print("Done. All 2D slices saved.")
+    clean_dir = Path(CLEAN_SINOGRAM_ROOT)
+    artifact_dir = Path(ARTIFACT_SINOGRAM_ROOT)
+
+    out_clean = Path(CLEAN_SINOGRAM_2D)
+    out_artifact = Path(ARTIFACT_ROOT_2D)
+
+    out_clean.mkdir(parents=True, exist_ok=True)
+    out_artifact.mkdir(parents=True, exist_ok=True)
+
+    clean_files = sorted(clean_dir.glob("*.npy"))
+
+    print(f"Found {len(clean_files)} 3D sinograms.")
+
+    total_slices = 0
+    saved_slices = 0
+
+    for clean_path in tqdm(clean_files, desc="Converting to 2D"):
+
+        artifact_path = artifact_dir / clean_path.name
+
+        if not artifact_path.exists():
+            print(f"Skipping {clean_path.name}: missing artifact file")
+            continue
+
+        # Load
+        clean_3d = np.load(clean_path)
+        artifact_3d = np.load(artifact_path)
+
+        if clean_3d.shape != artifact_3d.shape:
+            print(f"Shape mismatch: {clean_path.name}")
+            continue
+
+        V, U, Vdet = clean_3d.shape
+
+        # Loop over detector_v
+        for k in range(0, Vdet, STRIDE):
+
+            clean_slice = clean_3d[:, :, k]
+            artifact_slice = artifact_3d[:, :, k]
+
+            total_slices += 1
+
+            # ---------------------------------------------------
+            # Optional filtering (skip empty slices)
+            # ---------------------------------------------------
+            if USE_FILTERING:
+                if np.mean(clean_slice) < MEAN_THRESHOLD:
+                    continue
+
+
+            # ---------------------------------------------------
+            # Save with matching names
+            # ---------------------------------------------------
+            base_name = clean_path.stem
+            slice_name = f"{base_name}_slice_{k:04d}.npy"
+
+            np.save(out_clean / slice_name, clean_slice)
+            np.save(out_artifact / slice_name, artifact_slice)
+
+            saved_slices += 1
+
+    print("\nDONE ✅")
+    print(f"Total slices processed: {total_slices}")
+    print(f"Slices saved: {saved_slices}")
+
+
+# ============================================================
+if __name__ == "__main__":
+    main()
