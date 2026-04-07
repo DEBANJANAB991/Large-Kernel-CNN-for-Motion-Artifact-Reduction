@@ -7,6 +7,12 @@ import torch
 import matplotlib.pyplot as plt
 from pathlib import Path
 from tqdm import tqdm
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+repo_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(repo_root))
 
 from diffct.differentiable import ConeProjectorFunction
 from config import DATASET_PATH, CLEAN_SINOGRAM_ROOT
@@ -74,38 +80,40 @@ def save_sino_preview(sino, out_png):
 
 
 # -----------------------------------------------------------
-# NEW: 4. SELECT THE CORRECT CT SERIES
+# SELECT THE CORRECT CT SERIES
 # -----------------------------------------------------------
 def select_ct_series(patient_dir):
-    """
-    Choose exactly one series per patient:
-      1) Prefer CT PLAIN THIN
-      2) Else CT Plain
-      3) Else skip
-    """
 
-    thin = []
-    plain = []
+    VALID_NAMES = {
+        "ct plain",
+        "ct plain thin",
+        "ct thin plain"
+    }
+
+    candidates = []
 
     for root, _, files in os.walk(patient_dir):
-        if not any(f.lower().endswith(".dcm") for f in files):
+
+        dcm_files = [f for f in files if f.lower().endswith(".dcm")]
+        if len(dcm_files) < 20:
             continue
 
-        folder = Path(root).name.lower()
+        folder = os.path.basename(root).lower()
 
-        if "ct plain thin" in folder or "ct_plain_thin" in folder or "plain thin" in folder:
-            thin.append(root)
+        # Normalize
+        folder = folder.replace("_", " ").replace("-", " ")
+        folder = " ".join(folder.split())  # remove extra spaces
 
-        elif "ct plain" in folder or "ct_plain" in folder:
-            plain.append(root)
+        if folder in VALID_NAMES:
+            candidates.append((root, len(dcm_files)))
 
-    if len(thin) > 0:
-        return sorted(thin)[0]
-    if len(plain) > 0:
-        return sorted(plain)[0]
-    return None
+    if len(candidates) == 0:
+        return None
 
+    # Pick the one with most slices
+    best_series = sorted(candidates, key=lambda x: x[1], reverse=True)[0][0]
 
+    return best_series
 
 # -----------------------------------------------------------
 # 5. MAIN SINOGRAM GENERATION
