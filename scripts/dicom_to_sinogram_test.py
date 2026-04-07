@@ -5,8 +5,13 @@ import numpy as np
 import pydicom
 import torch
 import matplotlib.pyplot as plt
-from pathlib import Path
+import sys
 from tqdm import tqdm
+from pathlib import Path
+
+# Add project root to Python path
+repo_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(repo_root))
 
 from diffct.differentiable import ConeProjectorFunction
 from config import DATASET_PATH, CLEAN_SINOGRAM_ROOT, TEST_CLEAN_SINOGRAM
@@ -22,7 +27,6 @@ def load_dicom_series(folder):
         if f.lower().endswith(".dcm")
     ]
 
-    # Safe sorting
     def sort_key(p):
         try:
             return pydicom.dcmread(p, stop_before_pixels=True).InstanceNumber
@@ -48,7 +52,7 @@ def load_dicom_series(folder):
 
 
 # -----------------------------------------------------------
-# 3. VISUALIZE SINOGRAM
+# 2. VISUALIZE SINOGRAM
 # -----------------------------------------------------------
 def save_sino_preview(sino, out_png):
 
@@ -72,17 +76,10 @@ def save_sino_preview(sino, out_png):
     plt.close()
 
 
-
 # -----------------------------------------------------------
-# NEW: 4. SELECT THE CORRECT CT SERIES
+# 3. SELECT CORRECT CT SERIES
 # -----------------------------------------------------------
 def select_ct_series(patient_dir):
-    """
-    Choose exactly one series per patient:
-      1) Prefer CT PLAIN THIN
-      2) Else CT Plain
-      3) Else skip
-    """
 
     thin = []
     plain = []
@@ -103,25 +100,26 @@ def select_ct_series(patient_dir):
         return sorted(thin)[0]
     if len(plain) > 0:
         return sorted(plain)[0]
+
     return None
 
 
-
+# -----------------------------------------------------------
+# MAIN
+# -----------------------------------------------------------
 def main():
 
     ROOT = Path(DATASET_PATH)
     OUT_DIR = Path(TEST_CLEAN_SINOGRAM)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # -----------------------------------------------------------
-    # Collect already-processed patients from CLEAN_SINOGRAM_ROOT
-    # -----------------------------------------------------------
+    # Already processed (training set)
     existing_patients = set(
         p.stem for p in Path(CLEAN_SINOGRAM_ROOT).glob("*.npy")
     )
     print(f"Found {len(existing_patients)} existing sinograms. Skipping those patients.")
 
-    # Geometry (UNCHANGED)
+    # Geometry
     det_u = 800
     det_v = 800
     du = dv = 1.0
@@ -131,7 +129,7 @@ def main():
 
     angles = torch.linspace(0, 2 * math.pi, num_views, device="cuda")
 
-    # Find patient folders
+    # Load patients
     patients = sorted([
         p for p in ROOT.rglob("*")
         if p.is_dir() and p.name.startswith("CQ500CT")
@@ -139,25 +137,29 @@ def main():
 
     print(f"Found {len(patients)} total patients.")
 
+    # -------------------------------------------------------
+    # LIMIT TO 10 NEW PATIENTS
+    # -------------------------------------------------------
+    max_patients = 30
+    processed_count = 0
+
     for p in tqdm(patients, desc="Processing unseen patients"):
 
-        # -------------------------------------------------------
-        # SKIP patients already used for training
-        # -------------------------------------------------------
+        # Skip training patients
         if p.name in existing_patients:
             continue
 
-        # -------------------------------------------------------
-        # Select correct CT series (UNCHANGED)
-        # -------------------------------------------------------
+        # Stop after 30
+        if processed_count >= max_patients:
+            break
+
+        # Select CT series
         series = select_ct_series(str(p))
         if series is None:
             print(f"Skipping {p.name}: No CT PLAIN THIN or CT Plain found.")
             continue
 
-        # -------------------------------------------------------
-        # Load DICOM volume (UNCHANGED)
-        # -------------------------------------------------------
+        # Load DICOM
         vol_np, first_ds = load_dicom_series(series)
 
         vol_np = vol_np.astype(np.float32)
@@ -173,9 +175,7 @@ def main():
             vol_np, dtype=torch.float32, device="cuda"
         ).contiguous()
 
-        # -------------------------------------------------------
-        # Forward projection (UNCHANGED)
-        # -------------------------------------------------------
+        # Forward projection
         sino = ConeProjectorFunction.apply(
             vol_torch,
             angles,
@@ -187,13 +187,14 @@ def main():
 
         sino_np = sino.detach().cpu().numpy()
 
-        # -------------------------------------------------------
-        # Save new unseen sinograms
-        # -------------------------------------------------------
+        # Save
         np.save(OUT_DIR / f"{p.name}.npy", sino_np)
         save_sino_preview(sino_np, OUT_DIR / f"{p.name}.png")
 
-    print("\nDONE — unseen sinograms generated & saved.")
+        processed_count += 1
+
+    print(f"\nDONE — {processed_count} unseen sinograms generated & saved.")
+
 
 # -----------------------------------------------------------
 if __name__ == "__main__":
