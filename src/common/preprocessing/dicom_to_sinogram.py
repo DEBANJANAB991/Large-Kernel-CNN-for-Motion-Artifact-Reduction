@@ -21,12 +21,16 @@ from tqdm import tqdm
 import sys
 import json
 
-# Add project root to Python path (specifically to import diffct and config.py)
-repo_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(repo_root))
+ROOT = Path(__file__).resolve()
 
-from diffct.differentiable import ConeProjectorFunction
-from config import DATASET_PATH, CLEAN_SINOGRAM_ROOT
+# Go up until we find config folder
+for parent in ROOT.parents:
+    if (parent / "config").exists():
+        sys.path.insert(0, str(parent))
+        break
+
+from ExternalRepo.diffct.diffct.differentiable import ConeProjectorFunction
+from config.config import DATASET_PATH, CLEAN_SINOGRAM_ROOT
 
 
 # -----------------------------------------------------------
