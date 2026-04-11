@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
+"""
+Module: Projection-Domain Inference and Evaluation for CT Motion Artifact Reduction
 
+This script performs inference and quantitative evaluation of trained deep learning
+models for motion artifact reduction in 2D SinoGrams.
+
+Key Features:
+- Supports multiple architectures (MR-LKV, UNet, RepLKNet, SwinIR, Restormer)
+- Ensures fair evaluation using unseen test data
+- Maintains consistency with training normalization strategy
+- Handles model-specific input constraints via padding
+- Provides efficiency benchmarks
+"""
 import sys
 from pathlib import Path
 import argparse
@@ -18,17 +30,14 @@ from ptflops import get_model_complexity_info
 # PATH SETUP
 # ============================================================
 
-repo_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(repo_root))
-
 SCRIPT_DIR  = Path(__file__).resolve().parent
 RESULTS_DIR = SCRIPT_DIR / "results"
 TABLE_DIR   = RESULTS_DIR / "tables"
 TABLE_DIR.mkdir(parents=True, exist_ok=True)
 
-from models.model_wrapper import build_model
+from model_wrapper import build_model
 
-from config import (
+from config.config import (
     ART_SINOGRAM_2D,
     CLEAN_SINOGRAM_2D_TEST,
     PREDICTED_SINOGRAM_2D_TEST_v2,
@@ -56,9 +65,6 @@ def run_inference(model_name):
         raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
 
     checkpoint = torch.load(ckpt_path, map_location=DEVICE)
-   # model.load_state_dict(
-    #    checkpoint["model"] if "model" in checkpoint else checkpoint
-    #)
     state_dict = checkpoint["model"] if "model" in checkpoint else checkpoint
 
 
@@ -90,21 +96,13 @@ def run_inference(model_name):
     sample = np.load(files[0]).astype(np.float32)
     H, W   = sample.shape
     C      = 1
-    print(f"Input size: ({H}, {W})")
-    if model_name == "restormer":
-        print("Computing FLOPs for Restormer at safe resolution (128x128)")
-        flops_input = (1, 128, 128)
-    elif model_name == "swinir":
-        flops_input = (1, 128, 128)
-        print("Computing FLOPs for SwinIR at 128x128 (training resolution)")
-    else:
-        flops_input = (C, H, W)
+    
     # -------------------------
     # FLOPs + Params
     # -------------------------
     macs, _ = get_model_complexity_info(
         model,
-        flops_input,   #(C, H, W),
+        (1,H,W),  
         as_strings=False,
         print_per_layer_stat=False,
         verbose=False
@@ -113,18 +111,11 @@ def run_inference(model_name):
     params_m   = sum(p.numel() for p in model.parameters()) / 1e6
 
     print(f"Params : {params_m:.2f} M")
-    if model_name == "swinir" or model_name == "restormer":
-        H, W = 540, 800
-        scale = (H * W) / (128 * 128)
-        flops_gmac = flops_gmac* scale
-        print(f"MACs   : {flops_gmac:.2f} G")
-    else:
-        print(f"MACs   : {flops_gmac:.2f} G")
+    print(f"MACs   : {flops_gmac:.2f} G")
 
-    # -------------------------
-    # Warm-up
-    # -------------------------
-    # Pad dummy to multiple of 16 for warm-up
+   
+  
+    # Pad dummy to multiple of 16 
     pad_h_dummy = (16 - H % 16) % 16
     pad_w_dummy = (16 - W % 16) % 16
     dummy = torch.randn(1, 1, H + pad_h_dummy, W + pad_w_dummy).to(DEVICE)
@@ -218,9 +209,6 @@ def run_inference(model_name):
             
             data_range = gt.max() - gt.min()
 
-            # safety (avoid zero range)
-            #if data_range < 1e-6:
-            #    data_range = 1.0
             # -------------------------
             # Metrics on 2D sinogram slices
             # -------------------------
@@ -252,11 +240,6 @@ def run_inference(model_name):
 
     csv_path = TABLE_DIR / f"metrics_{model_name}.csv"
     df.to_csv(csv_path, index=False)
-
-    print(f"\nMean PSNR : {df['PSNR'].mean():.2f} dB")
-    print(f"Mean SSIM : {df['SSIM'].mean():.4f}")
-    print(f"Mean MAE  : {df['MAE'].mean():.6f}")
-    print(f"Mean RMSE : {df['RMSE'].mean():.6f}")
     print(f"Metrics saved → {csv_path}")
     print(f"Predictions  → {pred_dir}")
 
