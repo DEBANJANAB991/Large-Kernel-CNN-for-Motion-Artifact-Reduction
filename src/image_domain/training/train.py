@@ -426,7 +426,6 @@ def main():
                     art, clean = adjust_replk_input(art, clean)
                 art, clean = art.to(device), clean.to(device)
                 pred = model(art)
-                pred = torch.clamp(pred, 0, 1)
                 
                 if pred.shape[-2:] != clean.shape[-2:]:
                     pred = F.interpolate(pred, size=clean.shape[-2:], mode='bilinear', align_corners=False)
@@ -501,7 +500,6 @@ def main():
                 art, clean = adjust_replk_input(art, clean)
             art, clean = art.to(device), clean.to(device)
             pred = model(art)
-            pred = torch.clamp(pred, 0, 1)
             
 
             if pred.shape[-2:] != clean.shape[-2:]:
