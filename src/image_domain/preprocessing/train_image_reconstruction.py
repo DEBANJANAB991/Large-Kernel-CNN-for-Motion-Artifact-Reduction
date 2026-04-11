@@ -2,7 +2,7 @@
 """
 Module: Cone-Beam CT Reconstruction using DiffCT
 
-This script reconstructs 3D CT volumes from clean and motion-corrupted sinograms.
+This script reconstructs 3D CT volumes from clean and motion-corrupted sinograms for training data.
 
 Pipeline:
 1. Load 3D sinograms
@@ -20,16 +20,14 @@ import torch
 from pathlib import Path
 from tqdm import tqdm
 import sys
-from diffct.differentiable import ConeBackprojectorFunction
-repo_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(repo_root))
+from ExternalRepo.diffct.diffct.differentiable import ConeBackprojectorFunction
 
 
 # ================================
 # IMPORT CONFIG PATHS
 # ================================
 
-from config import (
+from config.config import (
     CLEAN_SINOGRAM_ROOT,
     ARTIFACT_SINOGRAM_ROOT,
     RECON_CLEAN_ROOT,

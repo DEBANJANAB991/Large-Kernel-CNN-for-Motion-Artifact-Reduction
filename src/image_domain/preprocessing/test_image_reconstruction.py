@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
+"""
+Module: Cone-Beam CT Reconstruction using DiffCT
 
+This script reconstructs 3D CT volumes from clean and motion-corrupted sinograms for testing. 
+
+Pipeline:
+1. Load 3D sinograms
+2. Apply cone-beam geometric weighting
+3. Apply ramp + Hann filtering in frequency domain
+4. Perform backprojection using DiffCT
+5. Normalize reconstructed volumes
+
+
+"""
 import math
 import json
 import numpy as np
@@ -7,16 +20,12 @@ import torch
 from pathlib import Path
 from tqdm import tqdm
 import sys
-from diffct.differentiable import ConeBackprojectorFunction
-repo_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(repo_root))
-
+from ExternalRepo.diffct.diffct.differentiable import ConeBackprojectorFunction
 
 # ================================
 # IMPORT CONFIG PATHS
 # ================================
-#config for training data reconstruction, which will be used for training image-based models (UNet, RepLKNet, MR_LKV)
-from config import (
+from config.config import (
     TEST_CLEAN_SINOGRAM,
     ARTIFACT_SINOGRAM_3D_TEST,
     RECONSTRUCTED_CT_VOLUME
@@ -75,7 +84,7 @@ def load_metadata(patient_id):
             )
 
     # fallback (safe)
-    print(f"⚠️ Metadata not found for {patient_id}, using defaults")
+    print(f"Metadata not found for {patient_id}, using defaults")
     return 260, 512, 512, 0.4688
 
 
@@ -166,12 +175,12 @@ def process_folder(sino_dir, out_dir):
 
         patient_id = f.stem
 
-        # 🔥 LOAD METADATA HERE
+        #LOAD METADATA
         Nz, Ny, Nx, voxel_size = load_metadata(patient_id)
 
         reco = fdk_reconstruct(sino, Nz, Ny, Nx, voxel_size)
 
-        # 🔥 SAME normalization for both domains
+        #SAME normalization for both domains
         reco = normalize_volume(reco)
 
         np.save(out_dir / f.name, reco)
@@ -182,10 +191,10 @@ def process_folder(sino_dir, out_dir):
 # ================================
 if __name__ == "__main__":
 
-    print("🔵 Reconstructing CLEAN sinograms...")
+    print("Reconstructing CLEAN sinograms...")
     process_folder(CLEAN_SINO_DIR, OUT_CLEAN)
 
-    print("🔴 Reconstructing ARTIFACT sinograms...")
+    print("Reconstructing ARTIFACT sinograms...")
     process_folder(ART_SINO_DIR, OUT_ART)
 
-    print("\n✅ DONE — metadata-based reconstruction complete")
+    print("\nDONE — metadata-based reconstruction complete")
