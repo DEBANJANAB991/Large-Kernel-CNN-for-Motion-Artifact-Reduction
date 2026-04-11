@@ -12,7 +12,7 @@ Pipeline:
 4. Evaluate using PSNR and SSIM
 
 """
-
+import os
 import sys
 from pathlib import Path
 import argparse
@@ -24,35 +24,25 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 import numpy as np
 import random
-
-
-repo_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(repo_root))
-
-
-# Adding external repositories
-sys.path.insert(0, str(repo_root / "ExternalRepo"))
-sys.path.insert(0, str(repo_root / "ExternalRepo" / "Restormer"))
-sys.path.insert(0, str(repo_root / "ExternalRepo" / "SwinIR"))
-from models.MR_LKV import MR_LKV      # MR-LKV implementation
+from models.MR_LKV_image import MR_LKV      # MR-LKV implementation for image domain 
 from models.UNet import UNet                     # U-Net baseline
 from models.ReplkNet import RepLKNet             # Original RepLKNet backbone
-from SwinIR.models.network_swinir import SwinIR #SwinIR import
+from ExternalRepo.SwinIR.models.network_swinir import SwinIR #SwinIR import
 
-# Restormer import 
-try:
-    from basicsr.models.archs.restormer_arch import Restormer as RestormerNet #Restormer import
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "../../"))
+
+# Add src
+sys.path.append(PROJECT_ROOT)
+sys.path.append(os.path.join(PROJECT_ROOT, "ExternalRepo", "Restormer"))
+from ExternalRepo.Restormer.basicsr.models.archs.restormer_arch import Restormer as RestormerNet #Restormer import
     
-except ModuleNotFoundError:
-    archs_dir = repo_root / "ExternalRepo" / "Restormer" / "basicsr" / "models" / "archs"
-    sys.path.insert(0, str(archs_dir))
-    from restormer_arch import Restormer as RestormerNet
+
 
 # Config imports
-from config import (
+from config.config import (
     RECON_CLEAN_ROOT,
     RECON_ARTIFACT_ROOT,
-    #NEW_ART_SINOGRAM_2D,
     CKPT_DIR,
     BATCH_SIZE,
     LR,
@@ -69,8 +59,7 @@ np.random.seed(42)
 def psnr(pred, target, max_val: float = 1.0):
     mse = F.mse_loss(pred, target, reduction='mean')
     return 10 * torch.log10(max_val**2 / (mse + 1e-12))
-    #mse = torch.clamp(mse, min=1e-10)
-    #return 10 * torch.log10(1.0 / mse)
+    
 
 def gaussian(window_size: int, sigma: float):
     coords = torch.arange(window_size, dtype=torch.float32) - window_size // 2
@@ -139,10 +128,7 @@ class CTImageDataset(Dataset):
             Nz = clean_vol.shape[0]
 
             # Filter out near-empty slices (e.g., air/background regions)
-            valid_slices = []
-            for z in range(Nz):
-                if clean_vol[z].std() > 0.01:
-                    valid_slices.append(z)
+            valid_slices = [z for z in range(Nz) if clean_vol[z].std() > 0.01]
 
             # Uniform sampling across the volume 
             if len(valid_slices) > max_slices_per_patient:
@@ -268,9 +254,6 @@ def parse_args():
     p.add_argument("--replk-channels",  nargs=4, type=int, default=[32, 64, 128, 256])
     p.add_argument("--replk-small",     type=int, default=5)
     p.add_argument("--replk-drop-path", type=float, default=0.0)
-    # dataset sampling
-    p.add_argument("--max-views-per-patient", type=int, default=100,
-                   help="Maximum number of 2D views to sample per patient (random sample if more exist).")
     p.add_argument("--patch", type=int, default=0,
                    help="If >0, random crop patch of size patch x patch. Set 0 to disable cropping and use full images.")
     p.add_argument("--resume", type=Path, default=None,
@@ -295,7 +278,7 @@ def _model_dir(ckpt_root: Path, model_name: str) -> Path:
 # ---------------- Train & Eval ---------------- #
 def main():
     args = parse_args()
-    print(f"Starting training with model={args.model}…")
+   
  
 
     model_ckpt_dir = _model_dir(args.ckpt_dir, args.model)
@@ -304,15 +287,12 @@ def main():
     print(f"Checkpoints will be saved to: {model_ckpt_dir}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Using device:", device)
+    
 
     dataset = CTImageDataset(
     args.clean_root,
     args.art_root)
-   
-    print(f"Effective samples per epoch: {len(dataset)}")
     x, y = dataset[0]
-    print("Sample shape:", x.shape, y.shape)
     
     
    # ================= PATIENT-WISE SPLIT =================
@@ -340,11 +320,6 @@ def main():
     val_ds   = torch.utils.data.Subset(dataset, val_idx)
     test_ds  = torch.utils.data.Subset(dataset, test_idx)
 
-    print(f"\nPatients → Train:{len(train_p)} Val:{len(val_p)} Test:{len(test_p)}")
-    print(f"Slices   → Train:{len(train_ds)} Val:{len(val_ds)} Test:{len(test_ds)}")
-
-
-    
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=2)
     val_loader   = DataLoader(val_ds,   batch_size=args.batch_size, shuffle=False, num_workers=2)
     test_loader  = DataLoader(test_ds,  batch_size=args.batch_size, shuffle=False, num_workers=2)
@@ -366,8 +341,7 @@ def main():
         model = RepLKNet(in_channels=1, out_channels=1).to(device)
     elif args.model == "swinir":
         model = SwinIRWrapper(img_size=128, window_size=8, in_chans=1, out_chans=1, depths=[2,2,2,2], embed_dim=48, num_heads=[2,2,2,2], use_checkpoint=False).to(device)
-       # model = SwinIRWrapper(img_size=512, window_size=8, in_chans=1, out_chans=1, depths=[4,4,4,4], embed_dim=64, num_heads=[2,2,2,2], use_checkpoint=True).to(device)
-    elif args.model == "restormer":#dim=64 or 48, num_block =[2,2,2,3](if time, train again)
+    elif args.model == "restormer":
         model = RestormerWrapper(inp_channels=1, out_channels=1, dim=48, num_blocks=[2,2,2,3], num_refinement_blocks=2, heads=[1,2,4,8], ffn_expansion_factor=2.0).to(device)
         for module in model.modules():
             if hasattr(module, "use_checkpoint"):
@@ -399,7 +373,6 @@ def main():
     EARLY_STOP_PATIENCE = 10
     # ---------------- RESUME CHECKPOINT ----------------
     if args.resume is not None:
-        print(f"Resuming from checkpoint: {args.resume}")
         checkpoint = torch.load(args.resume, map_location=device)
 
         model.load_state_dict(checkpoint["model"])
@@ -412,7 +385,7 @@ def main():
         print(f"Resumed from epoch {checkpoint['epoch']} | best_val = {best_val:.6f}")
 
     # logging
-    results_dir = repo_root / "results"
+    results_dir = Path(PROJECT_ROOT) / "results"
     results_dir.mkdir(exist_ok=True)
     log_path = results_dir / f"{args.model}_training_log.csv"
     if args.resume is None or not log_path.exists():
@@ -420,7 +393,6 @@ def main():
             f.write("epoch,train_loss,val_loss,val_psnr,val_ssim\n")
 
     train_losses, val_losses, psnr_scores, ssim_scores = [], [], [], []
-    print("Starting training...")
     for epoch in range(start_epoch, args.epochs + 1):
 
         model.train()
@@ -445,7 +417,7 @@ def main():
             running_train += loss.item() * art.size(0)
         train_loss = running_train / max(1, len(train_ds))
 
-        # Evaluate model on validation set without gradient computation
+        # Evaluate model on validation set
         model.eval()
         running_val = running_psnr = running_ssim = 0.0
         with torch.no_grad():
