@@ -15,11 +15,10 @@ from pathlib import Path
 from tqdm import tqdm
 import sys
 
-# Add project root to Python path
-repo_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(repo_root))
 
-from config import TEST_CLEAN_SINOGRAM, ARTIFACT_SINOGRAM_3D_TEST
+
+from config.config import TEST_CLEAN_SINOGRAM, ARTIFACT_SINOGRAM_3D_TEST
+
 def set_random_seed(seed=42):
     np.random.seed(seed)
     random.seed(seed)
