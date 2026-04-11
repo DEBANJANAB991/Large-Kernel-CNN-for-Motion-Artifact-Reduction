@@ -10,7 +10,7 @@ Key Features:
 - Ensures fair evaluation using unseen test data
 - Maintains consistency with training normalization strategy
 - Handles model-specific input constraints via padding
-- Provides both accuracy and efficiency benchmarks
+- Provides efficiency benchmarks
 """
 import sys
 from pathlib import Path
@@ -28,17 +28,13 @@ from ptflops import get_model_complexity_info
 # ============================================================
 # PATH SETUP
 # ============================================================
-
-repo_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(repo_root))
-
 SCRIPT_DIR  = Path(__file__).resolve().parent
 RESULTS_DIR = SCRIPT_DIR / "results"
 TABLE_DIR   = RESULTS_DIR / "tables"
 TABLE_DIR.mkdir(parents=True, exist_ok=True)
 
-from models.model_wrapper import build_model
-from config import RECONSTRUCTED_CT_VOLUME, CKPT_DIR
+from model_wrapper import build_model
+from config.config import RECONSTRUCTED_CT_VOLUME, CKPT_DIR
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -68,8 +64,6 @@ def run_inference(model_name):
     model.load_state_dict(state_dict, strict=False)
     model.eval()
 
-    print(f"Loaded checkpoint: {ckpt_path}")
-
     # -------------------------
     # Paths
     # -------------------------
@@ -93,7 +87,7 @@ def run_inference(model_name):
     # -------------------------
     sample = np.load(files[0])
     _, H, W = sample.shape
-
+    
     macs, _ = get_model_complexity_info(
         model,
         (1, H, W),
@@ -106,7 +100,9 @@ def run_inference(model_name):
     params_m = sum(p.numel() for p in model.parameters()) / 1e6
 
     print(f"Params: {params_m:.2f} M")
-    print(f"MACs  : {flops_gmac:.2f} G")
+    print(f"MACs   : {flops_gmac:.2f} G")
+ 
+        
 
     # -------------------------
     # Inference
@@ -215,11 +211,6 @@ def run_inference(model_name):
 
     csv_path = TABLE_DIR / f"image_domain_metrics_{model_name}.csv"
     df.to_csv(csv_path, index=False)
-
-    print(f"\nMean PSNR : {df['PSNR'].mean():.2f} dB")
-    print(f"Mean SSIM : {df['SSIM'].mean():.4f}")
-    print(f"Mean MAE  : {df['MAE'].mean():.6f}")
-    print(f"Mean RMSE : {df['RMSE'].mean():.6f}")
     print(f"Avg inference time: {avg_time_ms:.2f} ms")
 
     print(f"\nSaved → {csv_path}")
