@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 Assembles 2D predicted sinogram slices back into 3D sinograms.
-Reverses sinogram_to_2D.py exactly.
 
 Filename format: "CQ500CT19 CQ500CT19_slice_0064.npy"
 Slice axis: axis=2 (detector_v) — each slice shape (540, 800)
@@ -16,8 +15,13 @@ import sys
 import json
 import re
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve()
 
+# Go up until we find config folder
+for parent in ROOT.parents:
+    if (parent / "config").exists():
+        sys.path.insert(0, str(parent))
+        break
 from config import (
     PREDICTED_SINOGRAM_2D_TEST_v2,
     MERGED_SINOGRAM_3D_TEST_v2
@@ -27,13 +31,13 @@ ROOT_IN_DIR  = Path(PREDICTED_SINOGRAM_2D_TEST_v2)
 ROOT_OUT_DIR = Path(MERGED_SINOGRAM_3D_TEST_v2)
 ROOT_OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Matches: "CQ500CT19 CQ500CT19_slice_0064.npy"
+
 SLICE_PATTERN = re.compile(r"^(CQ500CT\d+)\s+\1_slice_(\d{4})\.npy$")
 
-# Expected dimensions — must match dicom_to_sinogram.py geometry
-NUM_VIEWS = 540   # axis=0
-DET_U     = 800   # axis=1
-DET_V     = 800   # axis=2 — sliced along this axis
+# Expected dimensions 
+NUM_VIEWS = 540   
+DET_U     = 800  
+DET_V     = 800   
 
 
 # ============================================================
