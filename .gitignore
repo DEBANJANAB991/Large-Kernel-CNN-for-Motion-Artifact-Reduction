@@ -4,7 +4,10 @@
 # python
 __pycache__/
 *.pyc
-
+# Temporary ignore
+SwinIR/
+scripts_backup/
+__init__.py
 # data & results
 results/
 *_preview/
